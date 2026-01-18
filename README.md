@@ -143,6 +143,65 @@ uv run python store_histogram_agent.py --column Total_Sales
 - matplotlib >= 3.10.8
 - openpyxl >= 3.1.5
 
+## Web API (FastAPI)
+
+### ローカル起動
+
+```bash
+uv run uvicorn app:app --reload --port 8000
+```
+
+ブラウザで http://localhost:8000 にアクセスすると、質問入力フォームが表示されます。
+
+### API エンドポイント
+
+| エンドポイント | メソッド | 説明 |
+|--------------|---------|------|
+| `/` | GET | Web UI（質問入力フォーム） |
+| `/api/query` | POST | 自然言語で質問 |
+| `/api/analyze` | POST | 特定カラムの分布分析 |
+| `/api/compare` | POST | 店舗間比較 |
+| `/api/columns` | GET | カラム一覧 |
+| `/api/examples` | GET | 質問例 |
+| `/health` | GET | ヘルスチェック |
+
+### API使用例
+
+```bash
+# 自然言語質問
+curl -X POST http://localhost:8000/api/query \
+  -H "Content-Type: application/json" \
+  -d '{"question": "売上高の分布を教えて"}'
+
+# 特定カラム分析
+curl -X POST http://localhost:8000/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"column": "Total_Sales"}'
+```
+
+## Renderへのデプロイ
+
+### 1. GitHubリポジトリを作成
+
+```bash
+gh repo create qstorm-eda-agent --public --source=. --push
+```
+
+### 2. Renderでデプロイ
+
+1. [Render Dashboard](https://dashboard.render.com/) にログイン
+2. **New** → **Web Service** を選択
+3. GitHubリポジトリを接続
+4. 設定:
+   - **Build Command**: `pip install uv && uv sync --frozen`
+   - **Start Command**: `uv run uvicorn app:app --host 0.0.0.0 --port $PORT`
+5. 環境変数を設定:
+   - `ANTHROPIC_API_KEY`: あなたのAPIキー
+
+### render.yaml を使用する場合
+
+リポジトリに `render.yaml` が含まれているため、**Blueprints** からもデプロイ可能です。
+
 ## 関連プロジェクト
 
 - [AutoGluon Assistant (MLZero)](https://github.com/autogluon/autogluon-assistant) - Zero-code AutoML through multiagent collaboration
