@@ -354,7 +354,7 @@ async def root():
     </div>
 
     <script>
-        const columns = %s;
+        const columns = {columns_json};
 
         // カラム一覧を表示
         const columnsDiv = document.getElementById('columns');
@@ -418,7 +418,9 @@ async def root():
     </script>
 </body>
 </html>
-    """ % str([{"name": c, "name_ja": COLUMN_DEFINITIONS.get(c, c)} for c in TARGET_COLUMNS if c not in ["shop", "shop_code"]])
+    """.format(
+        columns_json=str([{"name": c, "name_ja": COLUMN_DEFINITIONS.get(c, c)} for c in TARGET_COLUMNS if c not in ["shop", "shop_code"]])
+    )
 
     return HTMLResponse(content=html_content)
 
