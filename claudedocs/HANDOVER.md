@@ -2,7 +2,7 @@
 
 **作成日**: 2026-01-19
 **プロジェクト**: qstorm-eda-agent
-**現在のステータス**: ハイブリッドStreamlitアプリ実装完了、テスト・デプロイ待ち
+**現在のステータス**: ハイブリッドStreamlitアプリ デプロイ完了
 
 ---
 
@@ -179,35 +179,38 @@ services:
 
 ---
 
-## 6. 残タスク
+## 6. 完了済みタスク
 
-### 6.1 必須タスク
+### 6.1 デプロイ完了
 
-- [ ] **ローカルテスト**: `streamlit run streamlit_app.py`
-- [ ] **Gitコミット**: すべての変更をコミット
-- [ ] **GitHubプッシュ**: `git push origin master`
-- [ ] **Renderデプロイ確認**: 自動デプロイが成功するか確認
+- [x] **ローカルテスト**: `streamlit run streamlit_app.py`
+- [x] **Gitコミット**: すべての変更をコミット
+- [x] **GitHubプッシュ**: `git push origin master`
+- [x] **Procfile修正**: uvicorn → Streamlit に変更 (commit: `0893e29`)
+- [x] **Renderデプロイ確認**: 自動デプロイ成功
 
-### 6.2 推奨コマンド
+### 6.2 デプロイ修正履歴
+
+**問題**: `error: Failed to spawn: 'uvicorn'`
+
+**原因**: Procfileが古いuvicornコマンドを参照していた
+
+**解決**: Procfileを修正
+```diff
+- web: uvicorn app:app --host 0.0.0.0 --port $PORT
++ web: streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+```
+
+### 6.3 参考コマンド
 
 ```bash
 # ローカルテスト
 cd /mnt/c/PyCharm/ClaudeAgent\ SDK_Try
 streamlit run streamlit_app.py
 
-# Gitコミット
-git add .
-git commit -m "feat: Hybrid Streamlit app with rule-based NLP (no API required)
-
-- Add streamlit_app.py with menu selection UI and NLP input
-- Add RuleBasedNLP class for keyword-based intent/entity extraction
-- Update render.yaml for Streamlit deployment
-- Update pyproject.toml to make Claude Agent SDK optional
-- Create requirements.txt for Render
-
-This version does NOT require ANTHROPIC_API_KEY."
-
-git push origin master
+# Git操作
+git status
+git log --oneline -5
 ```
 
 ---
@@ -284,3 +287,4 @@ html_content = html_content.replace("{columns_json}",
 ---
 
 *最終更新: 2026-01-19 by Claude Code*
+*デプロイ修正完了: Procfile uvicorn → Streamlit (commit: 0893e29)*

@@ -108,7 +108,10 @@ Changed `%s` placeholders to `{columns_json}` with `.format()` method.
 
 ---
 
-### Phase 4: Brace Escape Fix (Current Session)
+### Phase 4: Brace Escape Fix
+
+**Commit**: `d3b21cc`
+**Title**: fix: Replace .format() with replace() to avoid CSS brace conflicts
 
 **Issue**: `KeyError: ' box-sizing'`
 
@@ -144,6 +147,206 @@ html_content = html_content.replace("{columns_json}", json.dumps(columns_data, e
 
 1. Added `import json` (line 18)
 2. Replaced `.format()` with `replace()` + `json.dumps()` (lines 424-430)
+
+---
+
+### Phase 5: Streamlit Hybrid App Migration
+
+**Commit**: `9013445`
+**Title**: feat: Hybrid Streamlit app with rule-based NLP (no API required)
+
+#### Background
+
+- **問題**: Claude Agent SDK版（`app.py`）がRenderデプロイ時に `Invalid API key` エラー
+- **原因**: `ANTHROPIC_API_KEY` 環境変数の設定が必要
+- **解決策**: APIキー不要のハイブリッドStreamlitアプリへ移行
+
+#### 設計決定
+
+ユーザー承認済みアプローチ:
+> "API新規登録不要であればハイブリッド案を承認する"
+
+採用設計:
+1. **メニュー選択式UI** - メイン操作方法
+2. **ルールベースNLP** - キーワードマッチングによる自然言語入力サポート
+3. **オプショナルAPI** - 将来的なClaude API統合の余地を残す
+
+#### Files Created/Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `streamlit_app.py` | 新規 | ハイブリッドStreamlitアプリ（779行） |
+| `requirements.txt` | 新規 | Render用依存関係ファイル |
+| `pyproject.toml` | 更新 | Claude Agent SDKをオプショナルに |
+| `render.yaml` | 更新 | Streamlitデプロイ設定 |
+
+#### RuleBasedNLP Engine
+
+```python
+class RuleBasedNLP:
+    INTENT_PATTERNS = {
+        "histogram": ["ヒストグラム", "分布", "ばらつき", "散らばり", "グラフ"],
+        "analyze": ["分析", "判定", "判別", "特定", "調べ"],
+        "compare": ["比較", "違い", "差", "対比", "vs"],
+        "normality": ["正規", "正規性", "ガウス", "検定"],
+        "summary": ["概要", "サマリー", "一覧", "まとめ"],
+    }
+```
+
+---
+
+### Phase 6: Render Deployment Error Fix
+
+**Commit**: `0893e29`
+**Title**: fix: Update Procfile to use Streamlit instead of uvicorn
+
+#### Problem
+
+```
+error: Failed to spawn: 'uvicorn'
+```
+
+Renderデプロイが失敗。
+
+#### Root Cause Analysis
+
+1. `Procfile` が `render.yaml` を上書きしていた
+2. `Procfile`: `web: uvicorn app:app --host 0.0.0.0 --port $PORT`
+3. `uvicorn` は `requirements.txt` に含まれていない（optional-dependenciesのみ）
+4. Render は Procfile を優先して読み込む
+
+#### Solution
+
+**Procfile 修正**:
+
+```diff
+- web: uvicorn app:app --host 0.0.0.0 --port $PORT
++ web: streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+```
+
+#### Verification
+
+- Render が自動デプロイを開始
+- デプロイログでエラーなし
+- Streamlit UI が正常に表示
+
+---
+
+## Render デプロイ設定
+
+### render.yaml
+
+```yaml
+services:
+  - type: web
+    name: qstorm-eda-agent
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+    autoDeploy: true
+```
+
+### Procfile
+
+```
+web: streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+```
+
+### 環境変数
+
+| 変数 | 必須 | 説明 |
+|------|------|------|
+| `PYTHON_VERSION` | Yes | Python 3.11 |
+| `PORT` | Yes (自動) | Renderが自動設定 |
+| `ANTHROPIC_API_KEY` | **No** | ハイブリッド版では不要 |
+
+### Render vs Procfile の優先順位
+
+| 設定ファイル | 優先度 | 用途 |
+|-------------|--------|------|
+| `Procfile` | **高** | Heroku互換、Renderも読み込む |
+| `render.yaml` | 中 | Render Blueprint固有設定 |
+
+**重要**: 両方存在する場合、`Procfile` の `startCommand` が優先される。
+
+---
+
+## テスト経緯
+
+### テストスイート概要
+
+`test_eda_agent.py` - EDA Distribution Agent テストスイート
+
+#### テストケース定義
+
+| テスト名 | 分布タイプ | パラメータ | 説明 |
+|---------|-----------|-----------|------|
+| `normal_standard` | 正規分布 | μ=50, σ=15 | 標準的な正規分布 |
+| `normal_narrow` | 正規分布 | μ=100, σ=5 | 狭い正規分布 |
+| `poisson_low_lambda` | ポアソン分布 | λ=3 | 低い発生率 |
+| `poisson_high_lambda` | ポアソン分布 | λ=10 | 高い発生率 |
+| `nbinom_overdispersed` | 負の二項分布 | r=5, p=0.3 | 過分散データ |
+| `nbinom_mild` | 負の二項分布 | r=10, p=0.5 | 軽度の過分散 |
+
+#### テスト実行コマンド
+
+```bash
+# 全テスト実行
+uv run python test_eda_agent.py
+
+# クイックテスト（1件のみ）
+uv run python test_eda_agent.py --quick
+
+# 特定の分布タイプのみ
+uv run python test_eda_agent.py --type normal
+uv run python test_eda_agent.py --type poisson
+uv run python test_eda_agent.py --type negative_binomial
+```
+
+#### テストデータ生成
+
+```python
+# 正規分布
+np.random.normal(mean, std, n)
+
+# ポアソン分布
+np.random.poisson(lam, n)
+
+# 負の二項分布
+np.random.negative_binomial(r, p, n)
+```
+
+#### 判定精度検証
+
+| 分布タイプ | 期待される判定 | 検証ポイント |
+|-----------|--------------|-------------|
+| 連続値データ | 正規分布 | Shapiro-Wilk, KS検定 |
+| 離散カウント (分散/平均≈1) | ポアソン分布 | 分散/平均比の閾値 |
+| 離散カウント (分散/平均>1) | 負の二項分布 | 過分散の検出 |
+
+### ローカルテスト手順
+
+```bash
+# Streamlitアプリ起動
+cd /mnt/c/PyCharm/ClaudeAgent\ SDK_Try
+streamlit run streamlit_app.py
+
+# ブラウザで確認
+# http://localhost:8501
+```
+
+### デプロイ前チェックリスト
+
+- [x] `streamlit_app.py` がエラーなく起動
+- [x] サンプルデータで分析機能が動作
+- [x] ヒストグラムが正常に表示
+- [x] 店舗間比較が正常に動作
+- [x] 日本語フォントが正常に表示
+- [x] `requirements.txt` に必要なパッケージがすべて含まれている
+- [x] `Procfile` が Streamlit コマンドを指定
 
 ---
 
@@ -200,7 +403,8 @@ html_content = html_content.replace("{columns_json}", json.dumps(columns_data, e
 
 ```
 ClaudeAgent SDK_Try/
-├── app.py                      # FastAPI Web API (18KB)
+├── streamlit_app.py            # Hybrid Streamlit App (779行) ★メイン
+├── app.py                      # FastAPI Web API (18KB) - 非推奨
 ├── store_histogram_agent.py    # Main Agent + MCP Tools (40KB)
 ├── eda_distribution_agent.py   # Core Distribution Analysis (30KB)
 ├── test_eda_agent.py           # Test Suite (9.5KB)
@@ -208,13 +412,15 @@ ClaudeAgent SDK_Try/
 ├── main.py                     # Entry Point (97B)
 ├── test_agent.py               # Basic Agent Test (456B)
 ├── test_agent2.py              # Agent Test v2 (967B)
-├── pyproject.toml              # Dependencies
-├── render.yaml                 # Render Deployment
-├── Procfile                    # Alternative Deployment
+├── pyproject.toml              # Dependencies (Streamlit + Optional API)
+├── requirements.txt            # Render用依存関係 (APIキー不要)
+├── render.yaml                 # Render Deployment (Streamlit)
+├── Procfile                    # Heroku互換 (Streamlit)
 ├── README.md                   # Documentation
 ├── CLAUDE.md                   # Project Instructions
 └── claudedocs/
-    └── DEVELOPMENT_HISTORY.md  # This File
+    ├── DEVELOPMENT_HISTORY.md  # This File
+    └── HANDOVER.md             # 開発引き継ぎドキュメント
 ```
 
 ---
@@ -308,9 +514,12 @@ fixed_extended_store_data_2024-FIX_kaizen_monthlyvol6_new.xlsx
 ## Git Commit History
 
 ```
-26f0c21 2026-01-19 05:03:05 fix: Replace % formatting with .format() in HTML template
-115002e 2026-01-19 04:42:48 feat: Add FastAPI Web API and Render deployment
-ffa3de1 2026-01-19 04:36:19 feat: Q-Storm EDA Distribution Analyzer Agent
+0893e29 2026-01-19 fix: Update Procfile to use Streamlit instead of uvicorn
+9013445 2026-01-19 feat: Hybrid Streamlit app with rule-based NLP (no API required)
+d3b21cc 2026-01-19 fix: Replace .format() with replace() to avoid CSS brace conflicts
+26f0c21 2026-01-19 fix: Replace % formatting with .format() in HTML template
+115002e 2026-01-19 feat: Add FastAPI Web API and Render deployment
+ffa3de1 2026-01-19 feat: Q-Storm EDA Distribution Analyzer Agent
 ```
 
 ---
@@ -374,3 +583,4 @@ html = html.replace("{placeholder}", json.dumps(data, ensure_ascii=False))
 ---
 
 *Generated by Claude Opus 4.5 - 2026-01-19*
+*Last Updated: 2026-01-19 (Phase 6: Render Deployment Error Fix)*
