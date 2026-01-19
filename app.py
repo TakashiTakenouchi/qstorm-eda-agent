@@ -15,6 +15,7 @@ Q-Storm EDA Distribution Analyzer - FastAPI Web API
 """
 
 import asyncio
+import json
 import os
 from contextlib import asynccontextmanager
 from typing import Any
@@ -418,9 +419,15 @@ async def root():
     </script>
 </body>
 </html>
-    """.format(
-        columns_json=str([{"name": c, "name_ja": COLUMN_DEFINITIONS.get(c, c)} for c in TARGET_COLUMNS if c not in ["shop", "shop_code"]])
-    )
+    """
+
+    # Generate columns JSON safely (avoid CSS brace conflicts with .format())
+    columns_data = [
+        {"name": c, "name_ja": COLUMN_DEFINITIONS.get(c, c)}
+        for c in TARGET_COLUMNS
+        if c not in ["shop", "shop_code"]
+    ]
+    html_content = html_content.replace("{columns_json}", json.dumps(columns_data, ensure_ascii=False))
 
     return HTMLResponse(content=html_content)
 
